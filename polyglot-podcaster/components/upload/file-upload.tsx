@@ -2,8 +2,14 @@
 
 import { useState, useCallback, useRef } from 'react'
 import { useAuth } from '@/lib/auth-context'
-import { createClientComponentClient } from '@/lib/supabase'
 import { Upload, X, FileAudio, AlertCircle, CheckCircle } from 'lucide-react'
+import {
+  uploadFile,
+  validateFile,
+  formatFileSize,
+  STORAGE_CONFIG,
+  type UploadResult
+} from '@/lib/storage'
 
 interface FileUploadProps {
   onUploadComplete?: (fileUrl: string, fileName: string) => void
@@ -19,25 +25,11 @@ interface UploadFile {
   url?: string
 }
 
-const ACCEPTED_FORMATS = ['audio/mpeg', 'audio/wav', 'audio/mp4', 'audio/m4a', 'audio/ogg']
-const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100MB
-
 export function FileUpload({ onUploadComplete, onUploadError }: FileUploadProps) {
   const { user } = useAuth()
   const [files, setFiles] = useState<UploadFile[]>([])
   const [isDragOver, setIsDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const supabase = createClientComponentClient()
-
-  const validateFile = (file: File): string | null => {
-    if (!ACCEPTED_FORMATS.includes(file.type)) {
-      return 'Please upload an audio file (MP3, WAV, MP4, M4A, or OGG)'
-    }
-    if (file.size > MAX_FILE_SIZE) {
-      return 'File size must be less than 100MB'
-    }
-    return null
-  }
 
   const generateFileId = () => Math.random().toString(36).substring(2, 15)
 
@@ -46,32 +38,32 @@ export function FileUpload({ onUploadComplete, onUploadError }: FileUploadProps)
     const validFiles: UploadFile[] = []
 
     fileArray.forEach(file => {
-      const error = validateFile(file)
+      const validation = validateFile(file)
       const id = generateFileId()
 
       validFiles.push({
         file,
         id,
         progress: 0,
-        status: error ? 'error' : 'pending',
-        error
+        status: validation.isValid ? 'pending' : 'error',
+        error: validation.error
       })
     })
 
     setFiles(prev => [...prev, ...validFiles])
 
     // Start uploading valid files
-    validFiles.forEach(uploadFile => {
-      if (uploadFile.status === 'pending') {
-        startUpload(uploadFile)
+    validFiles.forEach(uploadFileItem => {
+      if (uploadFileItem.status === 'pending') {
+        startUpload(uploadFileItem)
       }
     })
   }, [])
 
-  const startUpload = async (uploadFile: UploadFile) => {
+  const startUpload = async (uploadFileItem: UploadFile) => {
     if (!user) {
       setFiles(prev => prev.map(f =>
-        f.id === uploadFile.id
+        f.id === uploadFileItem.id
           ? { ...f, status: 'error', error: 'Please sign in to upload files' }
           : f
       ))
@@ -79,48 +71,39 @@ export function FileUpload({ onUploadComplete, onUploadError }: FileUploadProps)
     }
 
     setFiles(prev => prev.map(f =>
-      f.id === uploadFile.id ? { ...f, status: 'uploading' } : f
+      f.id === uploadFileItem.id ? { ...f, status: 'uploading' } : f
     ))
 
     try {
-      const fileExt = uploadFile.file.name.split('.').pop()
-      const fileName = `${user.id}/${Date.now()}-${uploadFile.file.name}`
+      const result: UploadResult = await uploadFile(
+        uploadFileItem.file,
+        user.id,
+        (progress) => {
+          const percentage = (progress.loaded / progress.total) * 100
+          setFiles(prev => prev.map(f =>
+            f.id === uploadFileItem.id ? { ...f, progress: percentage } : f
+          ))
+        }
+      )
 
-      const { data, error } = await supabase.storage
-        .from('podcast-files')
-        .upload(fileName, uploadFile.file, {
-          cacheControl: '3600',
-          upsert: false,
-          onUploadProgress: (progress) => {
-            const percentage = (progress.loaded / progress.total) * 100
-            setFiles(prev => prev.map(f =>
-              f.id === uploadFile.id ? { ...f, progress: percentage } : f
-            ))
-          }
-        })
-
-      if (error) {
-        throw error
+      if (!result.success) {
+        throw new Error(result.error)
       }
 
-      const { data: { publicUrl } } = supabase.storage
-        .from('podcast-files')
-        .getPublicUrl(fileName)
-
       setFiles(prev => prev.map(f =>
-        f.id === uploadFile.id
-          ? { ...f, status: 'completed', progress: 100, url: publicUrl }
+        f.id === uploadFileItem.id
+          ? { ...f, status: 'completed', progress: 100, url: result.data!.publicUrl }
           : f
       ))
 
-      onUploadComplete?.(publicUrl, uploadFile.file.name)
+      onUploadComplete?.(result.data!.publicUrl, result.data!.fileName)
 
     } catch (error: any) {
       console.error('Upload error:', error)
       const errorMessage = error.message || 'Upload failed. Please try again.'
 
       setFiles(prev => prev.map(f =>
-        f.id === uploadFile.id
+        f.id === uploadFileItem.id
           ? { ...f, status: 'error', error: errorMessage }
           : f
       ))
@@ -164,13 +147,7 @@ export function FileUpload({ onUploadComplete, onUploadError }: FileUploadProps)
     }
   }, [addFiles])
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return '0 Bytes'
-    const k = 1024
-    const sizes = ['Bytes', 'KB', 'MB', 'GB']
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-  }
+
 
   return (
     <div className="w-full max-w-4xl mx-auto">
@@ -209,7 +186,7 @@ export function FileUpload({ onUploadComplete, onUploadError }: FileUploadProps)
               Drag and drop your audio files here, or click to browse
             </p>
             <p className="text-xs text-gray-500">
-              Supports MP3, WAV, MP4, M4A, OGG • Max 100MB per file
+              Supports {STORAGE_CONFIG.ALLOWED_EXTENSIONS.join(', ').toUpperCase()} • Max {formatFileSize(STORAGE_CONFIG.MAX_FILE_SIZE)} per file
             </p>
           </div>
 
