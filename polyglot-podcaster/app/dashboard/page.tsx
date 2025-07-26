@@ -3,6 +3,7 @@
 import { useAuth } from '@/lib/auth-context'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
+import { StorageUsage } from '@/components/dashboard/storage-usage'
 
 export default function DashboardPage() {
   const { user, loading, signOut } = useAuth()
@@ -57,6 +58,11 @@ export default function DashboardPage() {
       </nav>
 
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        {/* Storage Usage */}
+        <div className="px-4 sm:px-0 mb-6">
+          <StorageUsage />
+        </div>
+
         <div className="px-4 py-6 sm:px-0">
           <div className="border-4 border-dashed border-gray-200 rounded-lg h-96 flex items-center justify-center">
             <div className="text-center">
@@ -66,12 +72,20 @@ export default function DashboardPage() {
               <p className="text-gray-600 mb-6">
                 Upload your first podcast to get started with AI-powered content generation.
               </p>
-              <button
-                onClick={() => router.push('/upload')}
-                className="bg-blue-600 text-white px-6 py-3 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-              >
-                Upload Podcast
-              </button>
+              <div className="flex space-x-4">
+                <button
+                  onClick={() => router.push('/files')}
+                  className="bg-gray-600 text-white px-6 py-3 rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+                >
+                  Manage Files
+                </button>
+                <button
+                  onClick={() => router.push('/upload')}
+                  className="bg-blue-600 text-white px-6 py-3 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                >
+                  Upload Podcast
+                </button>
+              </div>
             </div>
           </div>
         </div>
