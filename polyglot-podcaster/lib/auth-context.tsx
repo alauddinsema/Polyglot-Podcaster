@@ -4,6 +4,41 @@ import { createContext, useContext, useEffect, useState } from 'react'
 import { User, Session } from '@supabase/supabase-js'
 import { createClientComponentClient } from './supabase'
 
+// Fallback API call function that uses Next.js API routes to bypass browser extensions
+const fallbackAuth = async (action: 'signin' | 'signup', payload: any) => {
+  const endpoint = `/api/auth/${action}`
+
+  // Use XMLHttpRequest to bypass extension interference
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', endpoint)
+    xhr.setRequestHeader('Content-Type', 'application/json')
+
+    xhr.onload = () => {
+      try {
+        const response = JSON.parse(xhr.responseText)
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(response)
+        } else {
+          resolve({ data: null, error: response.error || { message: 'Authentication failed' } })
+        }
+      } catch (e) {
+        reject(new Error('Failed to parse response'))
+      }
+    }
+
+    xhr.onerror = () => reject(new Error('Network request failed'))
+    xhr.ontimeout = () => reject(new Error('Request timed out'))
+    xhr.timeout = 30000
+
+    const body = action === 'signin'
+      ? JSON.stringify({ email: payload.email, password: payload.password })
+      : JSON.stringify({ email: payload.email, password: payload.password, metadata: payload.data })
+
+    xhr.send(body)
+  })
+}
+
 interface AuthContextType {
   user: User | null
   session: Session | null
@@ -82,10 +117,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Check if error is caused by browser extension interference
       if (err?.message?.includes('Failed to fetch') || err?.toString?.().includes('chrome-extension')) {
-        return {
-          data: null,
-          error: {
-            message: 'Browser extension is blocking the request. Please try disabling extensions or use incognito mode.'
+        // Try fallback API route
+        try {
+          const response = await fallbackAuth('signup', { email, password, data: metadata })
+          return response
+        } catch (directErr) {
+          return {
+            data: null,
+            error: {
+              message: 'Browser extension is blocking the request. Please try disabling extensions or use incognito mode.'
+            }
           }
         }
       }
@@ -106,10 +147,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Check if error is caused by browser extension interference
       if (err?.message?.includes('Failed to fetch') || err?.toString?.().includes('chrome-extension')) {
-        return {
-          data: null,
-          error: {
-            message: 'Browser extension is blocking the request. Please try disabling extensions or use incognito mode.'
+        // Try fallback API route
+        try {
+          const response = await fallbackAuth('signin', { email, password })
+          return response
+        } catch (directErr) {
+          return {
+            data: null,
+            error: {
+              message: 'Browser extension is blocking the request. Please try disabling extensions or use incognito mode.'
+            }
           }
         }
       }

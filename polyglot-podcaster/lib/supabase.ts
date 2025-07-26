@@ -4,9 +4,62 @@ import { createBrowserClient, createServerClient } from '@supabase/ssr'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-// Client-side Supabase client
+// Custom fetch function that bypasses browser extension interference
+const customFetch = (url: RequestInfo | URL, options?: RequestInit) => {
+  // Store original fetch
+  const originalFetch = window.fetch
+
+  // Create a new fetch request using XMLHttpRequest as fallback
+  return new Promise<Response>((resolve, reject) => {
+    // Try original fetch first
+    originalFetch(url, options)
+      .then(resolve)
+      .catch((error) => {
+        console.warn('Original fetch failed, trying XMLHttpRequest fallback:', error)
+
+        // Fallback to XMLHttpRequest
+        const xhr = new XMLHttpRequest()
+        const method = options?.method || 'GET'
+
+        xhr.open(method, url.toString())
+
+        // Set headers
+        if (options?.headers) {
+          const headers = options.headers as Record<string, string>
+          Object.entries(headers).forEach(([key, value]) => {
+            xhr.setRequestHeader(key, value)
+          })
+        }
+
+        xhr.onload = () => {
+          const response = new Response(xhr.responseText, {
+            status: xhr.status,
+            statusText: xhr.statusText,
+            headers: new Headers(xhr.getAllResponseHeaders().split('\r\n').reduce((acc, line) => {
+              const [key, value] = line.split(': ')
+              if (key && value) acc[key] = value
+              return acc
+            }, {} as Record<string, string>))
+          })
+          resolve(response)
+        }
+
+        xhr.onerror = () => reject(new Error('Network request failed'))
+        xhr.ontimeout = () => reject(new Error('Network request timed out'))
+
+        xhr.timeout = 30000 // 30 second timeout
+        xhr.send(options?.body as string)
+      })
+  })
+}
+
+// Client-side Supabase client with extension-proof fetch
 export const createClientComponentClient = () => {
-  return createBrowserClient(supabaseUrl, supabaseAnonKey)
+  return createBrowserClient(supabaseUrl, supabaseAnonKey, {
+    global: {
+      fetch: customFetch
+    }
+  })
 }
 
 // Server-side Supabase client for Server Components
