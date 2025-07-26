@@ -57,7 +57,17 @@ export function LoginForm({ onToggleMode }: LoginFormProps) {
 
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
-          {error}
+          <div className="font-medium">{error}</div>
+          {error.includes('Browser extension') && (
+            <div className="mt-2 text-xs">
+              <strong>Troubleshooting tips:</strong>
+              <ul className="list-disc list-inside mt-1 space-y-1">
+                <li>Try opening this page in incognito/private mode</li>
+                <li>Temporarily disable browser extensions</li>
+                <li>Check if ad blockers are interfering</li>
+              </ul>
+            </div>
+          )}
         </div>
       )}
 

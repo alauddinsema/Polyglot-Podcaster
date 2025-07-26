@@ -26,28 +26,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const supabase = createClientComponentClient()
 
   useEffect(() => {
-    setMounted(true)
+    let isMounted = true
 
-    // Get initial session
-    const getInitialSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      setSession(session)
-      setUser(session?.user ?? null)
-      setLoading(false)
+    const initializeAuth = async () => {
+      try {
+        // Get initial session
+        const { data: { session } } = await supabase.auth.getSession()
+
+        if (isMounted) {
+          setSession(session)
+          setUser(session?.user ?? null)
+          setLoading(false)
+          setMounted(true)
+        }
+      } catch (error) {
+        console.error('Error getting initial session:', error)
+        if (isMounted) {
+          setLoading(false)
+          setMounted(true)
+        }
+      }
     }
 
-    getInitialSession()
+    initializeAuth()
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        setSession(session)
-        setUser(session?.user ?? null)
-        setLoading(false)
+        if (isMounted) {
+          setSession(session)
+          setUser(session?.user ?? null)
+          setLoading(false)
+        }
       }
     )
 
-    return () => subscription.unsubscribe()
+    return () => {
+      isMounted = false
+      subscription.unsubscribe()
+    }
   }, [supabase.auth])
 
   const signUp = async (email: string, password: string, metadata?: any) => {
@@ -60,8 +77,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       })
       return { data, error }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Sign up error:', err)
+
+      // Check if error is caused by browser extension interference
+      if (err?.message?.includes('Failed to fetch') || err?.toString?.().includes('chrome-extension')) {
+        return {
+          data: null,
+          error: {
+            message: 'Browser extension is blocking the request. Please try disabling extensions or use incognito mode.'
+          }
+        }
+      }
+
       return { data: null, error: { message: 'Network error. Please check your connection and try again.' } }
     }
   }
@@ -73,20 +101,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         password
       })
       return { data, error }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Sign in error:', err)
+
+      // Check if error is caused by browser extension interference
+      if (err?.message?.includes('Failed to fetch') || err?.toString?.().includes('chrome-extension')) {
+        return {
+          data: null,
+          error: {
+            message: 'Browser extension is blocking the request. Please try disabling extensions or use incognito mode.'
+          }
+        }
+      }
+
       return { data: null, error: { message: 'Network error. Please check your connection and try again.' } }
     }
   }
 
   const signInWithGoogle = async () => {
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`
+        }
+      })
+      return { data, error }
+    } catch (err: any) {
+      console.error('Google sign in error:', err)
+
+      // Check if error is caused by browser extension interference
+      if (err?.message?.includes('Failed to fetch') || err?.toString?.().includes('chrome-extension')) {
+        return {
+          data: null,
+          error: {
+            message: 'Browser extension is blocking the request. Please try disabling extensions or use incognito mode.'
+          }
+        }
       }
-    })
-    return { data, error }
+
+      return { data: null, error: { message: 'Network error. Please check your connection and try again.' } }
+    }
   }
 
   const signOut = async () => {
