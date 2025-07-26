@@ -66,7 +66,10 @@ export default function DashboardPage() {
               <p className="text-gray-600 mb-6">
                 Upload your first podcast to get started with AI-powered content generation.
               </p>
-              <button className="bg-blue-600 text-white px-6 py-3 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+              <button
+                onClick={() => router.push('/upload')}
+                className="bg-blue-600 text-white px-6 py-3 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              >
                 Upload Podcast
               </button>
             </div>
